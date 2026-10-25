@@ -1,0 +1,12 @@
+{
+  "name": "adhd-harness",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Step Harness: single-file step-by-step task app. This package exists only for the jsdom tests.",
+  "scripts": {
+    "test": "node tests/test.js"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}
