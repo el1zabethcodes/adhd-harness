@@ -10,3 +10,6 @@ venv/
 # Generated runtime data (lesson stores and run traces)
 data/*.jsonl
 logs/*.jsonl
+
+# Local security-scanner cache
+.mimosa/

@@ -19,11 +19,24 @@ from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlparse
 
 
 def estimate_tokens(text: str) -> int:
     """Rough token estimate (~4 chars per token) when usage stats are absent."""
     return max(1, (len(text) + 3) // 4)
+
+
+def _normalize_base_url(base_url: str | None) -> str | None:
+    """Accept only well-formed http(s) endpoint URLs from configuration."""
+    if not base_url:
+        return None
+    parsed = urlparse(base_url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError(
+            "base URL must be a well-formed http(s) URL, got: " + repr(base_url)
+        )
+    return base_url
 
 
 @dataclass
@@ -83,7 +96,9 @@ class OpenAICompatClient(LLMClient):
             ) from exc
         self._client = AsyncOpenAI(
             api_key=api_key or os.environ.get("OPENAI_API_KEY"),
-            base_url=base_url or os.environ.get("OPENAI_BASE_URL") or None,
+            base_url=_normalize_base_url(
+                base_url or os.environ.get("OPENAI_BASE_URL")
+            ),
         )
 
     async def complete(
