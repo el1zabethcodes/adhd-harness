@@ -1,8 +1,0 @@
-# Core
-pydantic>=2.5
-
-# LLM client for live OpenAI-compatible endpoints (offline scripted mode works without it)
-openai>=1.30
-
-# Pretty console output (optional: falls back to plain ANSI colours)
-rich>=13.0
