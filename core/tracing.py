@@ -71,9 +71,12 @@ class TraceLogger:
 class ConsoleReporter:
     """Colour-coded live view of the agent dialogue."""
 
-    def __init__(self, quiet: bool = False) -> None:
+    def __init__(self, quiet: bool = False, console: "RichConsole | None" = None) -> None:
         self.quiet = quiet
-        self._console = RichConsole(highlight=False) if _HAS_RICH else None
+        if console is not None:
+            self._console = console
+        else:
+            self._console = RichConsole(highlight=False) if _HAS_RICH else None
 
     # ------------------------------------------------------------------ core
     def _emit(self, role: str, text: str, bold: bool = False) -> None:
