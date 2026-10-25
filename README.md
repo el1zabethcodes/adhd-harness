@@ -1,35 +1,59 @@
-# Multi-Agent Self-Improvement Harness
+<div align="center">
 
-A modular, framework-free Python harness that combines multi-agent interaction
-(Worker <-> Critic) with long-term, in-context self-improvement (Reflection ->
-persistent Lesson Store -> context injection on future runs). No LangChain,
-CrewAI or other heavy frameworks: plain `asyncio`, Pydantic v2, an
-OpenAI-compatible client, and a deterministic offline mode that needs no API
-key.
+# adhd-harness
 
-The loop it runs:
+**A multi-agent, self-improving LLM harness: a Worker that acts, a Critic that
+checks, a Reflector that learns — and a lesson store that never forgets.**
 
-1. The **Orchestrator** retrieves the most relevant past lessons for the task.
-2. The **Worker** solves the task step by step (Thought - Action - Observation)
-   with schema-validated tools and the injected lessons in its context.
-3. The **Critic** judges every intermediate step and every final-answer claim;
-   unsupported numbers, hallucinations and logic errors are sent back as hints.
-4. The **Reflection** agent analyses the finished trajectory and distills
-   concrete, generalizable rules (lessons).
-5. The **Lesson Store** persists the lessons (with deduplication) and feeds
-   them back into step 1 - the harness gets smarter without any fine-tuning.
+No LangChain. No CrewAI. Plain `asyncio`, Pydantic v2, any
+OpenAI-compatible endpoint — and a deterministic offline mode that needs no
+API key.
 
-## Architecture
+![python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+![pydantic](https://img.shields.io/badge/pydantic-v2-green)
+![asyncio](https://img.shields.io/badge/runtime-native%20asyncio-ffa640)
+![offline](https://img.shields.io/badge/demo-offline%20%26%20deterministic-8A2BE2)
+![tests](https://img.shields.io/badge/tests-7%2F7%20passing-brightgreen)
+![license](https://img.shields.io/badge/license-AGPL--3.0-blue)
+
+</div>
+
+---
+
+## The loop in motion
+
+**Run 1 — fresh store.** The Worker tries mental arithmetic and gets it wrong;
+the Critic rejects the unsupported answer; the Worker verifies every
+subexpression with the calculator; the Reflector distills a durable rule.
+
+<div align="center"><img src="docs/img/run1.gif" width="840" alt="animated replay of run 1: mistake, critic feedback, tool-verified fix, lesson saved"></div>
+
+**Run 2 — same problem type, new numbers.** The store's lesson is retrieved
+and injected into the Worker's context automatically: clean solve, zero
+revisions, and the re-proposed rule is deduplicated instead of duplicated.
+
+<div align="center"><img src="docs/img/run2.gif" width="840" alt="animated replay of run 2: lesson injected, clean first-pass solve, dedup reinforcement"></div>
+
+Both replays are rendered from real harness runs (`scripts/render_assets.py`).
+
+## Terminal snapshots
+
+<div align="center">
+<img src="docs/img/run1.svg" width="880" alt="terminal screenshot of run 1"><br><br>
+<img src="docs/img/run2.svg" width="880" alt="terminal screenshot of run 2">
+</div>
+
+## How it works
 
 ```
-                    +-------------------------------------------+
-                    |               ORCHESTRATOR                |
-                    |   Harness.run(task, problem_type)         |
-                    |   - deterministic turn manager            |
-                    |   - max_turns / max_revisions             |
-                    |   - token budget / timeout                |
-                    |   - loop & no-progress detection          |
-                    +------+----------------+-------------------+
+                +-------------------------------------------+
+                |               ORCHESTRATOR                |
+                |   Harness.run(task, problem_type)         |
+                |   - deterministic turn manager            |
+                |   - max_turns / max_revisions             |
+                |   - token budget / timeout                |
+                |   - loop & no-progress detection          |
+                +------+----------------+-------------------+
                            |                |                |
         1. retrieve        |                | 2. inject      | 5. after the run
         top-k lessons      |                | lessons        |    reflect on the
@@ -62,31 +86,38 @@ The loop it runs:
                                        smarter (lessons re-injected)
 ```
 
-Numbered dataflow: (1) retrieval, (2) context injection, (3) validated tool
-calls, (4) critic verdicts/hints, (5) post-run reflection, (6) lessons stored
-and re-used.
+**Lesson lifecycle**
+
+```
+        run finishes                      next similar task
+             |                                      |
+             v                                      v
+  REFLECTOR distills drafts            STORE retrieves top-k
+             |                          (idf + problem_type + effectiveness)
+             v                                      |
+  STORE.add(): near-duplicates --------------------+
+  merged (trigram Jaccard),                lessons injected into WORKER context
+  novel rules persisted
+```
 
 ## Project layout
 
 ```
 multi_agent_harness/
 ├── core/
-│   ├── __init__.py        # public API re-exports
-│   ├── schemas.py         # Pydantic models: Lesson, WorkerTurn, CriticVerdict...
-│   ├── llm.py             # LLMClient + OpenAICompatClient + ScriptedLLM (offline)
-│   ├── tools.py           # ToolRegistry: mock tools + real functions + validation
-│   ├── memory.py          # LessonStore: JSONL persistence, retrieval, dedup
-│   ├── agents.py          # WorkerAgent / CriticAgent / ReflectionAgent
-│   ├── tracing.py         # TraceLogger (JSONL) + ConsoleReporter (rich/ANSI)
-│   └── orchestrator.py    # Harness: turn manager + safety limits + reflection
-├── examples/
-│   └── demo_two_runs.py   # End-to-end demo: mistake -> lesson -> clean rerun
-├── tests/
-│   └── test_core.py       # offline smoke tests (no API key needed)
-├── data/                  # persistent lesson stores (*.jsonl, gitignored)
-├── logs/                  # full run trajectories (*.jsonl, gitignored)
-├── requirements.txt
-└── README.md
+│   ├── schemas.py          # Pydantic models: Lesson, WorkerTurn, CriticVerdict...
+│   ├── llm.py              # LLMClient + OpenAICompatClient + ScriptedLLM (offline)
+│   ├── tools.py            # ToolRegistry: mock tools + real functions + validation
+│   ├── memory.py           # LessonStore: JSONL persistence, retrieval, dedup
+│   ├── agents.py           # WorkerAgent / CriticAgent / ReflectionAgent
+│   ├── tracing.py          # TraceLogger (JSONL) + ConsoleReporter (rich/ANSI)
+│   └── orchestrator.py     # Harness: turn manager + safety limits + reflection
+├── examples/demo_two_runs.py   # end-to-end demo: mistake -> lesson -> clean rerun
+├── scripts/render_assets.py    # regenerates docs/img/* (SVG + GIF) from real runs
+├── tests/test_core.py          # offline smoke tests (no API key needed)
+├── data/                       # persistent lesson stores (*.jsonl, gitignored)
+├── logs/                       # full run trajectories (*.jsonl, gitignored)
+└── docs/img/                   # rendered screenshots and animations
 ```
 
 ## Quickstart
@@ -115,57 +146,32 @@ python tests/test_core.py    # or: pytest tests/
 
 ## What the demo shows
 
-```
-RUN 1 (fresh store):
-  WORKER   mental math -> "FINAL ANSWER: 556"      (wrong)
-  CRITIC   REVISE: answer not backed by any tool observation...
-  WORKER   calculator("17 * 23") -> 391 ; calculator("459 / 3") -> 153
-  WORKER   "FINAL ANSWER: 544"                       (correct)
-  CRITIC   APPROVE
-  REFLECT  saves lesson: "Never evaluate arithmetic mentally. Call the
-           calculator tool for every subexpression..."
-  => status=success, revisions=1
+| | Run 1 (fresh store) | Run 2 (lesson injected) |
+|---|---|---|
+| Worker behaviour | mental math, wrong answer `556` | calculator from the first turn |
+| Critic verdicts | 1 x `REVISE` + approvals | approvals only |
+| Revisions | 1 | **0** |
+| Final answer | `544` (correct) | `768` (correct, first pass) |
+| Reflection | saves new lesson | re-proposes rule -> deduplicated |
+| Trace file | `logs/run_*.jsonl` | `logs/run_*.jsonl` |
 
-RUN 2 (same problem type, new numbers):
-  LESSON   retrieved 1 lesson(s) into the worker context
-  WORKER   calculator("12 * 47") -> 564 ; calculator("816 / 4") -> 204
-  WORKER   "FINAL ANSWER: 768"
-  CRITIC   APPROVE (first pass)
-  REFLECT  re-proposes the same rule -> store deduplicates (reinforced, not duplicated)
-  => status=success, revisions=0
-```
+Every run writes a full audit trail (worker turns, tool results, critic
+verdicts, reflections, lessons) to `logs/run_*.jsonl`; the console shows the
+live colour-coded dialogue (`rich` when installed, plain ANSI otherwise).
 
-Every run writes a full audit trail (prompts metadata, worker turns, tool
-results, critic verdicts, reflections, lessons) to `logs/run_*.jsonl`, and the
-console shows the live colour-coded dialogue (`rich` when installed, plain
-ANSI otherwise).
+## Safety limits (all hard stops)
 
-## How the run loop works
+| Limit | Config key | Stops status |
+|---|---|---|
+| Turn budget | `max_turns` | `max_turns` |
+| Critic revision loops | `max_revisions` | `max_revisions` |
+| Token budget | `max_tokens_budget` | `budget_exhausted` |
+| Wall clock | `timeout_seconds` | `timeout` |
+| Identical tool call repeated | `repeat_call_abort` | `loop_detected` |
+| Identical final answer repeated | - | `no_progress` |
+| Malformed agent output (x2) | - | `invalid_output` |
 
-`Harness.run(task, problem_type)` executes, under `asyncio` with a hard
-timeout:
-
-1. `LessonStore.retrieve(problem_type + task, top_k)` scores lessons by
-   idf-weighted keyword coverage (x1.5 for an exact `problem_type` match, mild
-   boosts for reinforcement count and observed helped/used ratio).
-2. Turn loop (max `max_turns`):
-   - Worker replies with exactly one JSON object: a tool `action` or a
-     `final_answer` (Pydantic-validated; one repair round-trip on bad JSON,
-     then `invalid_output`).
-   - Tool calls go through `ToolRegistry.dispatch()`: argument-schema
-     validation, safe execution, structured errors as observations. The same
-     tool called `repeat_call_abort` times in a row aborts (`loop_detected`).
-   - Critic judges every executed step and every final claim:
-     `approve` ends the run, `revise` sends a hint back (bounded by
-     `max_revisions`), `fail` aborts. A repeated identical final answer aborts
-     (`no_progress`).
-3. The Reflection agent converts the trajectory into lesson drafts; the store
-   merges near-duplicates (character-trigram Jaccard >= 0.45 within the same
-   problem type, 0.65 across types) instead of accumulating copies.
-4. On success, all injected lessons get their `times_helped` bumped - lessons
-   that demonstrably work are ranked higher by retrieval.
-
-All limits live in `RunConfig` (`core/schemas.py`).
+All of them live in `RunConfig` (`core/schemas.py`).
 
 ## Adding new tools
 
@@ -198,16 +204,12 @@ observations the Worker can react to.
 
 ## Adding new roles
 
-1. Subclass `BaseAgent` in `core/agents.py`, set `role` (this tag is what
-   `ScriptedLLM` checks), and add a method that returns a Pydantic model via
+1. Subclass `BaseAgent` in `core/agents.py`, set `role` (the tag
+   `ScriptedLLM` checks), and add a method returning a Pydantic model via
    `self._complete_json(...)`.
-2. Define the new output model in `core/schemas.py`.
-3. Call it from `Harness._solve()` (before/after the Worker, on critic
-   verdicts, ...) or from `_reflect()`.
-4. If the role changes turn economics, adjust `RunConfig` and, if needed, the
-   token-budget check.
-
-Example - a Planner that runs once before the Worker:
+2. Define the output model in `core/schemas.py`.
+3. Call it from `Harness._solve()` or `_reflect()`.
+4. Adjust `RunConfig` if the role changes turn economics.
 
 ```python
 class PlannerAgent(BaseAgent):
@@ -225,37 +227,30 @@ class PlannerAgent(BaseAgent):
 
 ## Scaling notes
 
-- **Semantic retrieval**: `LessonStore.retrieve()` is intentionally small.
-  Replace its scoring with embeddings (OpenAI embeddings, sentence-transformers)
-  and keep the same signature; nothing else changes. The JSONL store can be
-  swapped for SQLite/pgvector behind the same `add/retrieve` interface.
-- **Native tool calling**: agents use a strict JSON protocol instead of
-  provider-specific function calling, so one code path serves any
-  OpenAI-compatible endpoint *and* the offline scripted client. If you are
-  OpenAI-only, `OpenAICompatClient` can be extended to pass native tool
-  schemas.
-- **Cost control**: set `critic_every_step=False` in `RunConfig` to have the
-  critic judge only final answers.
-- **Parallelism**: `Harness` is ordinary asyncio - run independent tasks with
-  `asyncio.gather(*(harness.run(t) for t in tasks))`; each run gets its own
-  trace file. Give concurrent runs separate `logs_dir`s or share one safely
-  (appends are line-atomic).
-- **Dedup tuning**: `LessonStore(dedup_threshold=...)` - lower merges more
-  aggressively; with embeddings, switch to cosine similarity on lesson
-  vectors.
+- **Semantic retrieval** - `LessonStore.retrieve()` is intentionally small;
+  swap its scoring for embeddings and keep the signature. The JSONL store can
+  become SQLite/pgvector behind the same `add/retrieve` interface.
+- **Native tool calling** - agents use a strict JSON protocol so one code
+  path serves any OpenAI-compatible endpoint *and* the offline scripted
+  client; extend `OpenAICompatClient` if you want provider-native tools.
+- **Cost control** - `critic_every_step=False` makes the critic judge only
+  final answers.
+- **Parallelism** - `asyncio.gather(*(harness.run(t) for t in tasks))`; each
+  run gets its own trace file.
+- **Dedup tuning** - `LessonStore(dedup_threshold=...)`; lower merges more
+  aggressively; switch to cosine similarity once lessons are embedded.
 
 ## Design decisions
 
-- **No agent frameworks** - the whole point is a readable, auditable loop you
-  can lift into your own system (~1k lines total).
-- **Deterministic offline mode** - `ScriptedLLM` pins each scripted reply to a
-  role, so demos and CI verify the *orchestration* (retrieval, injection,
+- **No agent frameworks** - a readable, auditable loop you can lift into your
+  own system (~1k lines total).
+- **Deterministic offline mode** - `ScriptedLLM` pins each scripted reply to
+  a role, so demos and CI verify the *orchestration* (retrieval, injection,
   safety limits, dedup) without an API key and without flakiness.
 - **Observability first** - every run leaves a complete `.jsonl` trajectory;
   the pretty console is a view, not the record.
-- **Safety limits are hard stops**, not suggestions: budget, timeout, turns,
-  revision loops, repeated calls and repeated answers all terminate the run
-  with an explicit status recorded in the trace.
+- **Safety limits are hard stops**, not suggestions - every abort records an
+  explicit status in the trace.
 
 ## References
 
@@ -263,6 +258,10 @@ class PlannerAgent(BaseAgent):
   https://arxiv.org/abs/2303.11366 (and https://github.com/noahshinn/reflexion)
 - Memento: case-based reasoning without fine-tuning -
   https://github.com/Agent-on-the-Fly/Memento
+
+## License
+
+AGPL-3.0 - see [LICENSE](LICENSE).
 
 ## Repository conventions
 
